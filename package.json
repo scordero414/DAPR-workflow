@@ -1,0 +1,27 @@
+{
+  "name": "seatreservation",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "rimraf ./dist && tsc",
+    "start": "npm run build && node dist/app.js",
+    "start:dapr": "dapr run --app-id seatreservation --app-port 3000 --dapr-grpc-port 50001 --components-path ./components npm run start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@dapr/dapr": "^3.3.1",
+    "express": "^4.18.3",
+    "readline-sync": "^1.4.10",
+    "rimraf": "^5.0.5",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/readline-sync": "^1.4.8"
+  }
+}
