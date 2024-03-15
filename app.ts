@@ -1,6 +1,7 @@
 import {
   DaprServer,
   DaprWorkflowClient,
+  Task,
   TWorkflow,
   WorkflowActivityContext,
   WorkflowContext,
@@ -217,6 +218,22 @@ export const main = async () => {
       )
     );
 
+    const tasks: Task<any>[] = [];
+    const approvalEvent = ctx.waitForExternalEvent('approval_received');
+    const timeoutEvent = ctx.createTimer(20);
+    // yield sleep(10000);
+    tasks.push(approvalEvent);
+    tasks.push(timeoutEvent);
+    const winner: unknown = yield ctx.whenAny(tasks);
+
+    console.log('Waiting for approval or timeout!!!!', winner);
+
+    if (winner == timeoutEvent) {
+      return 'Cancelled';
+    }
+
+    const approvalDetails = approvalEvent.getResult();
+    console.log(`Approved by ${approvalDetails.approver}`);
     return results;
   };
 
@@ -281,7 +298,7 @@ export const main = async () => {
       const state = await workflowClient.waitForWorkflowCompletion(
         id,
         undefined,
-        1
+        60
       );
 
       console.log(
@@ -296,6 +313,25 @@ export const main = async () => {
 
     await workflowClient.stop();
     await workflowRuntime.stop();
+    res.send({ msg: 'Workflow received' });
+  });
+
+  app.post('/confirm-reservation', async (req: Request, res: Response) => {
+    const confirmationRes = req.body as any;
+
+    try {
+      await workflowClient.raiseEvent(
+        confirmationRes.workflowId,
+        'approval_received',
+        confirmationRes
+      );
+
+      // res.send({ msg: 'Workflow received' });
+    } catch (error) {
+      console.error('Error scheduling or waiting for orchestration:', error);
+      // res.send({ msg: 'Workflow is not finished on timeout limit' });
+    }
+
     res.send({ msg: 'Workflow received' });
   });
 };
