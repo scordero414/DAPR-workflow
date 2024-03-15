@@ -1,0 +1,18 @@
+spec:
+  policies:
+    retries:
+      # Global Retry Policy for Inbound Component operations
+      DefaultComponentInboundRetryPolicy:
+        policy: constant
+        duration: 5s
+        maxRetries: 5
+
+      retryForever:
+        policy: exponential
+        maxInterval: 10s
+        maxRetries: -1
+
+  targets:
+    apps:
+      seatreservation:
+        retry: DefaultComponentInboundRetryPolicy

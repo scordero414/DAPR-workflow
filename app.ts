@@ -70,11 +70,12 @@ export const main = async () => {
     { seat: 'C6', available: true },
   ];
 
-  const validateAvailableSeat = (
+  const validateAvailableSeat = async (
     _: WorkflowActivityContext,
     locationPreference: SeatTypeEnum
-  ): boolean => {
+  ): Promise<boolean> => {
     let available: boolean = false;
+    // await sleep(3000);
     switch (locationPreference) {
       case SeatTypeEnum.aisle:
         available = seatsA.some((seat) => seat.available);
@@ -94,28 +95,35 @@ export const main = async () => {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
-  const getAvailableSeats = (
+  const getAvailableSeats = async (
     _: WorkflowActivityContext,
     locationPreferences: SeatTypeEnum[]
-  ): Seat[] => {
-    return locationPreferences
-      .reduce<Seat[][]>((acc, curr) => {
-        switch (curr) {
-          case SeatTypeEnum.aisle:
-            acc.push(seatsA.filter((seat) => seat.available));
-            break;
-          case SeatTypeEnum.middle:
-            acc.push(seatsB.filter((seat) => seat.available));
-            break;
-          case SeatTypeEnum.window:
-          default:
-            acc.push(seatsC.filter((seat) => seat.available));
-            break;
-        }
+  ): Promise<Seat[]> => {
+    try {
+      // throw new Error('Error from getAvailableSeats');
+      await sleep(3000);
+      return locationPreferences
+        .reduce<Seat[][]>((acc, curr) => {
+          switch (curr) {
+            case SeatTypeEnum.aisle:
+              acc.push(seatsA.filter((seat) => seat.available));
+              break;
+            case SeatTypeEnum.middle:
+              acc.push(seatsB.filter((seat) => seat.available));
+              break;
+            case SeatTypeEnum.window:
+            default:
+              acc.push(seatsC.filter((seat) => seat.available));
+              break;
+          }
 
-        return acc;
-      }, [])
-      .flat();
+          return acc;
+        }, [])
+        .flat();
+    } catch (error) {
+      console.error('Error from getAvailableSeats:', error);
+      return [];
+    }
   };
 
   const getRandomSeat = async (_: WorkflowActivityContext, seats: Seat[]) => {
@@ -152,6 +160,10 @@ export const main = async () => {
       )
     );
 
+    if (availableSeats.length === 0) {
+      return 'There are not any seat available in this flight.';
+    }
+
     const { seat }: Seat = yield ctx.callActivity(
       getRandomSeat,
       availableSeats
@@ -169,6 +181,10 @@ export const main = async () => {
   await workflowRuntime.start();
   await server.start(); // Start the server
 
+  function sleep(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
   app.post('/auto-seat-reservation', async (req: Request, res: Response) => {
     const seatReservation = req.body as SeatReservation;
 
@@ -183,17 +199,54 @@ export const main = async () => {
       const state = await workflowClient.waitForWorkflowCompletion(
         id,
         undefined,
-        30
+        1
       );
 
       console.log(
         `Orchestration completed! Result: ${state?.serializedOutput}`
       );
 
-      res.send({ msg: 'Workflow received' });
+      // res.send({ msg: 'Workflow received' });
     } catch (error) {
       console.error('Error scheduling or waiting for orchestration:', error);
+      // res.send({ msg: 'Workflow is not finished on timeout limit' });
     }
+
+    await workflowClient.stop();
+    await workflowRuntime.stop();
+    res.send({ msg: 'Workflow received' });
+  });
+
+  app.post('/multi-seat-reservation', async (req: Request, res: Response) => {
+    const seatReservations = req.body.seats as SeatReservation[];
+
+    try {
+      const id = await workflowClient.scheduleNewWorkflow(
+        sequence,
+        seatReservations
+      );
+      console.log(`Orchestration scheduled with ID: ${id}`);
+
+      // Wait for orchestration completion
+      const state = await workflowClient.waitForWorkflowCompletion(
+        id,
+        undefined,
+        1
+      );
+
+      console.log(
+        `Orchestration completed! Result: ${state?.serializedOutput}`
+      );
+
+      // res.send({ msg: 'Workflow received' });
+    } catch (error) {
+      console.error('Error scheduling or waiting for orchestration:', error);
+      // res.send({ msg: 'Workflow is not finished on timeout limit' });
+    }
+
+    await workflowClient.stop();
+    await workflowRuntime.stop();
+    res.send({ msg: 'Workflow received' });
   });
 };
 
