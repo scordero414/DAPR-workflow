@@ -70,10 +70,10 @@ export const main = async () => {
     { seat: 'C6', available: true },
   ];
 
-  const validateAvailableSeat = async (
+  const validateAvailableSeat = (
     _: WorkflowActivityContext,
     locationPreference: SeatTypeEnum
-  ): Promise<boolean> => {
+  ): boolean => {
     let available: boolean = false;
     // await sleep(3000);
     switch (locationPreference) {
@@ -101,7 +101,7 @@ export const main = async () => {
   ): Promise<Seat[]> => {
     try {
       // throw new Error('Error from getAvailableSeats');
-      await sleep(3000);
+      // await sleep(3000);
       return locationPreferences
         .reduce<Seat[][]>((acc, curr) => {
           switch (curr) {
@@ -126,8 +126,43 @@ export const main = async () => {
     }
   };
 
-  const getRandomSeat = async (_: WorkflowActivityContext, seats: Seat[]) => {
-    return seats.at(getRandomInt(0, seats.length - 1));
+  const getRandomSeat = (_: WorkflowActivityContext, seats: Seat[]): Seat => {
+    return seats.at(getRandomInt(0, seats.length - 1)) as Seat;
+  };
+
+  const selectSeatTask = async function (
+    _: WorkflowActivityContext,
+    reservation: SeatReservation
+  ) {
+    const areAvailableSeats = validateAvailableSeat(
+      _,
+      reservation.locationPreference
+    );
+    if (areAvailableSeats) {
+      const availableSeatsByPreference = await getAvailableSeats(_, [
+        reservation.locationPreference,
+      ]);
+
+      const { seat }: Seat = getRandomSeat(_, availableSeatsByPreference);
+
+      return `The Selected seat for this flight is: ${seat}`;
+    }
+
+    const availableSeats = await getAvailableSeats(
+      _,
+      Object.keys(SeatTypeEnum).filter(
+        (locationPreference) =>
+          locationPreference !== reservation.locationPreference
+      ) as SeatTypeEnum[]
+    );
+
+    if (availableSeats.length === 0) {
+      return 'There are not any seat available in this flight.';
+    }
+
+    const { seat }: Seat = getRandomSeat(_, availableSeats);
+
+    return `The Random Selected seat for this flight is: ${seat}, because there are not any seat available in your location preference.`;
   };
 
   const sequence: TWorkflow = async function* (
@@ -172,11 +207,26 @@ export const main = async () => {
     return `The Random Selected seat for this flight is: ${seat}, because there are not any seat available in your location preference.`;
   };
 
+  const fanInFanOutSequence = async function* (
+    ctx: WorkflowContext,
+    reservations: SeatReservation[]
+  ) {
+    const results: string[] = yield ctx.whenAll(
+      reservations.map((reservation) =>
+        ctx.callActivity(selectSeatTask, reservation)
+      )
+    );
+
+    return results;
+  };
+
   workflowRuntime
     .registerWorkflow(sequence)
+    .registerWorkflow(fanInFanOutSequence)
     .registerActivity(getAvailableSeats)
     .registerActivity(validateAvailableSeat)
-    .registerActivity(getRandomSeat);
+    .registerActivity(getRandomSeat)
+    .registerActivity(selectSeatTask);
 
   await workflowRuntime.start();
   await server.start(); // Start the server
@@ -222,7 +272,7 @@ export const main = async () => {
 
     try {
       const id = await workflowClient.scheduleNewWorkflow(
-        sequence,
+        fanInFanOutSequence,
         seatReservations
       );
       console.log(`Orchestration scheduled with ID: ${id}`);
